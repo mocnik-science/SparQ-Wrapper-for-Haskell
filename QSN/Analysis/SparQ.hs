@@ -6,12 +6,17 @@
 -----------------------------------------------------------------------------
 
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module QSN.Analysis.SparQ (
     SparQQuery(..),
     Calculus(..),
     ConstraintReasoningCommand(..),
     SparQResult(..),
+    isUnmodifiedNetwork,
+    isModifiedNetwork,
+    isNotConsistent,
+    isOtherResult,
     querySparQ,
     querySparQraw,
     querySparQ',
@@ -21,6 +26,7 @@ import Control.Concurrent
 import Control.Monad
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as C
+import Data.DeriveTH
 import Data.List
 import Data.Maybe
 import qualified Data.Text as T
@@ -34,7 +40,9 @@ import System.Random
 data SparQQuery = LoadCalculus Calculus | ConstraintReasoning Calculus ConstraintReasoningCommand String deriving Eq
 data Calculus = CalculusOPRA Int | Star deriving Eq
 data ConstraintReasoningCommand = AClosure deriving Eq
-data SparQResult = UnmodifiedNetwork | NotConsistent String | Other String deriving (Eq, Show)
+data SparQResult = UnmodifiedNetwork | ModifiedNetwork String | NotConsistent String | OtherResult String deriving (Eq, Show)
+
+$(derive makeIs ''SparQResult)
 
 instance Show SparQQuery where
     show (LoadCalculus x) = "load-calculus " ++ show x
@@ -51,8 +59,9 @@ translateSparQ :: [String] -> [SparQResult]
 translateSparQ = map makeResult where
     makeResult x
         | "Unmodified network.\n" `isPrefixOf` x = UnmodifiedNetwork
+        | "Modified network.\n" `isPrefixOf` x = ModifiedNetwork . drop 14 $ x
         | "Not consistent.\n" `isPrefixOf` x = NotConsistent . drop 16 $ x
-        | otherwise = Other x
+        | otherwise = OtherResult x
 
 querySparQ :: [SparQQuery] -> IO [SparQResult]
 querySparQ = fmap translateSparQ . querySparQraw . map show
